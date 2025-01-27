@@ -676,9 +676,6 @@ async def bgmi(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Start the attack process
     asyncio.create_task(run_attack(ip, port, time_duration, update, user_id))
-    
-# Default thread value
-default_thread = "900"
 
 # Command to set thread dynamically
 async def set_thread(update: Update, context: ContextTypes.DEFAULT_TYPE):
