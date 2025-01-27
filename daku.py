@@ -716,7 +716,6 @@ async def run_attack(ip, port, time_duration, update, user_id):
             f"🌐 *IP:* {ip}\n"
             f"🎯 *PORT:* {port}\n"
             f"⏳ *DURATION:* {time_duration} seconds\n"
-            f"💻 *Thread Used:* {default_thread}\n"
             f"👤 *User ID:* {user_id}\n\n"
             "💫 The owner of this bot is ❄️Daku Bhaiz❄️. Contact @DAKUBhaiZz.",
             parse_mode="Markdown",
