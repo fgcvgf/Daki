@@ -10,7 +10,7 @@ import random
 import string
 
 # Bot token
-BOT_TOKEN = '7960283920:AAGOQ40Bws6WAWxDwLkzT5eVoj1ioX7ozZU'  # Replace with your bot token
+BOT_TOKEN = '7047464931:AAF72fboI32pakXmZ_CdUTbPxarANB6X8tQ'  # Replace with your bot token
 
 # Admin ID
 ADMIN_ID = 1944182800
